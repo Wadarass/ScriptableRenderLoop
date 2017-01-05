@@ -42,33 +42,42 @@ float3 F_Schlick(float3 f0, float u)
 // With analytical light (not image based light) we clamp the minimun roughness in the NDF to avoid numerical instability.
 #define UNITY_MIN_ROUGHNESS 0.002
 
-float D_GGXNoPI(float NdotH, float roughness)
-{
-    roughness = max(roughness, UNITY_MIN_ROUGHNESS);
-
-    float a2 = roughness * roughness;
-    float f = (NdotH * a2 - NdotH) * NdotH + 1.0;
-    return a2 / (f * f);
-}
-
-float D_GGX(float NdotH, float roughness)
-{
-    return INV_PI * D_GGXNoPI(NdotH, roughness);
-}
-
-float D_GGX_Inverse(float NdotH, float roughness)
+float2 D_GGXNoPI_Frac(float NdotH, float roughness)
 {
     roughness = max(roughness, UNITY_MIN_ROUGHNESS);
 
     float a2 = roughness * roughness;
     float f  = (NdotH * a2 - NdotH) * NdotH + 1.0;
-    float g  = (f * f) / a2;
 
-    return PI * g;
+    return float2(a2, f * f);
+}
+
+float D_GGXNoPI(float NdotH, float roughness)
+{
+    float2 d = D_GGXNoPI_Frac(NdotH, roughness);
+    return d.x / d.y;
+}
+
+float2 D_GGX_Frac(float NdotH, float roughness)
+{
+    float2 d = D_GGXNoPI_Frac(NdotH, roughness);
+    return float2(d.x, d.y * PI);
+}
+
+float D_GGX(float NdotH, float roughness)
+{
+    float2 d = D_GGX_Frac(NdotH, roughness);
+    return d.x / d.y;
+}
+
+float D_GGX_Inverse(float NdotH, float roughness)
+{
+    float2 d = D_GGX_Frac(NdotH, roughness);
+    return d.y / d.x;
 }
 
 // Ref: Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs, p. 19, 29.
-float G_MaskingSmithGGX(float NdotV, float VdotH, float roughness)
+float2 G_MaskingSmithGGX_Frac(float NdotV, float VdotH, float roughness)
 {
     roughness = max(roughness, UNITY_MIN_ROUGHNESS);
 
@@ -82,14 +91,23 @@ float G_MaskingSmithGGX(float NdotV, float VdotH, float roughness)
     float a2 = roughness * roughness;
     float z2 = NdotV * NdotV;
 
-    return hs / (0.5 + 0.5 * sqrt(1.0 + a2 * (1.0 / z2 - 1.0)));
+    return float2(hs, 0.5 + 0.5 * sqrt(1.0 + a2 * (1.0 / z2 - 1.0)));
+}
+
+float G_MaskingSmithGGX(float NdotV, float VdotH, float roughness)
+{
+    float2 g = G_MaskingSmithGGX_Frac(NdotV, VdotH, roughness);
+    return g.x / g.y;
 }
 
 // Ref: Understanding the Masking-Shadowing Function in Microfacet-Based BRDFs, p. 12.
 float D_GGX_Visible(float NdotH, float NdotV, float VdotH, float roughness)
 {
-    // Note that we pass 1.0 instead of 'VdotH' since the multiplication will already clamp.
-    return D_GGX(NdotH, roughness) * G_MaskingSmithGGX(NdotV, 1.0, roughness) * VdotH / NdotV;
+    float2 d = D_GGX_Frac(NdotH, roughness);
+    // Note that we pass 1 instead of 'VdotH' since the multiplication will already clamp.
+    float2 g = G_MaskingSmithGGX_Frac(NdotV, 1.0, roughness);
+
+    return (d.x * g.x * VdotH) / (d.y * g.y * NdotV);
 }
 
 // Ref: http://jcgt.org/published/0003/02/03/paper.pdf
