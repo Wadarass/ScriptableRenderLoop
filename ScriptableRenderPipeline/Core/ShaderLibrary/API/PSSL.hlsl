@@ -38,6 +38,7 @@
 #define TEXTURECUBE_ARRAY(textureName) TextureCubeArray textureName
 #define TEXTURE3D(textureName) Texture3D textureName
 #define RW_TEXTURE2D(type, textureName) RW_Texture2D<type> textureName
+#define RW_TEXTURE3D(type, textureName) RW_Texture3D<type> textureName
 
 #define SAMPLER2D(samplerName) SamplerState samplerName
 #define SAMPLERCUBE(samplerName) SamplerState samplerName

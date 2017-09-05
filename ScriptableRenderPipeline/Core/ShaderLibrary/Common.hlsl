@@ -535,13 +535,18 @@ float4 ComputeClipSpacePosition(float2 positionSS, float depthRaw)
     return float4(positionSS * 2.0 - 1.0, depthRaw, 1.0);
 }
 
-float2 ComputeScreenSpacePosition(float4 positionCS)
+float3 ComputeScreenSpacePositionWithZ(float4 positionCS)
 {
     float2 positionSS = positionCS.xy * (rcp(positionCS.w) * 0.5) + 0.5;
 #if UNITY_UV_STARTS_AT_TOP
     positionSS.y = 1.0 - positionSS.y;
 #endif
-    return positionSS;
+    return float3(positionSS, positionCS.z * rcp(positionCS.w));
+}
+
+float2 ComputeScreenSpacePosition(float4 positionCS)
+{
+    return ComputeScreenSpacePositionWithZ(positionCS).xy;
 }
 
 float3 ComputeViewSpacePosition(float2 positionSS, float depthRaw, float4x4 invProjMatrix)

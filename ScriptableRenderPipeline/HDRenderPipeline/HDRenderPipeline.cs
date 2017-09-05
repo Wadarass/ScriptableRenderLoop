@@ -892,6 +892,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 // TODO: Try to arrange code so we can trigger this call earlier and use async compute here to run sky convolution during other passes (once we move convolution shader to compute).
                 UpdateSkyEnvironment(hdCamera, cmd);
 
+                // Should be executed after the depth pre-pass, but before any lighting passes. Note: doesn't use depth information YET.
+                // Requires clustered lighting (falls back to a loop over all lights otherwise).
+                // Suitable candidate for the async compute queue.
+                VolumetricLightingPass(cmd, hdCamera);
+
                 RenderDeferredLighting(hdCamera, cmd);
 
                 // We compute subsurface scattering here. Therefore, no objects rendered afterwards will exhibit SSS.
@@ -918,9 +923,6 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
                 // Render all type of transparent forward (unlit, lit, complex (hair...)) to keep the sorting between transparent objects.
                 RenderForward(m_CullResults, camera, renderContext, cmd, false);
-
-                // Render fog.
-                VolumetricLightingPass(cmd, hdCamera);
 
                 PushFullScreenDebugTexture(cmd, m_CameraColorBuffer, camera, renderContext, FullScreenDebugMode.NanTracker);
 

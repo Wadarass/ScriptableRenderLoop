@@ -181,5 +181,11 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         internal static readonly int _GlobalFog_Extinction = Shader.PropertyToID("_GlobalFog_Extinction");
         internal static readonly int _GlobalFog_Asymmetry  = Shader.PropertyToID("_GlobalFog_Asymmetry");
         internal static readonly int _GlobalFog_Scattering = Shader.PropertyToID("_GlobalFog_Scattering");
+
+        internal static readonly int _vBufferDimensions = Shader.PropertyToID("_vBufferDimensions");
+        internal static readonly int _vBufferProjParams = Shader.PropertyToID("_vBufferProjParams");
+        internal static readonly int _vBufferCoordToViewDirWS = Shader.PropertyToID("_vBufferCoordToViewDirWS");
+        internal static readonly int _VolumetricLightingBufferCurrentFrame = Shader.PropertyToID("_VolumetricLightingBufferCurrentFrame");
+        internal static readonly int _VolumetricLightingBufferAccumulation = Shader.PropertyToID("_VolumetricLightingBufferAccumulation");
     }
 }

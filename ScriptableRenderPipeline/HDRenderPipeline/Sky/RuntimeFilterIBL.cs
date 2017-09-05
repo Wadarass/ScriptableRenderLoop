@@ -96,7 +96,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 for (int face = 0; face < 6; ++face)
                 {
                     Vector4   faceSize  = new Vector4(source.width >> mip, source.height >> mip, 1.0f / (source.width >> mip), 1.0f / (source.height >> mip));
-                    Matrix4x4 transform = SkyManager.ComputePixelCoordToWorldSpaceViewDirectionMatrix(0.5f * Mathf.PI, faceSize, worldToViewMatrices[face], true);
+                    Matrix4x4 transform = Utilities.ComputePixelCoordToWorldSpaceViewDirectionMatrix(0.5f * Mathf.PI, faceSize, worldToViewMatrices[face], true);
 
                     MaterialPropertyBlock props = new MaterialPropertyBlock();
                     props.SetFloat("_Level", mip);
