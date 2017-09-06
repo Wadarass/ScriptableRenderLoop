@@ -65,23 +65,32 @@ float HenyeyGreensteinPhaseFunction(float asymmetry, float LdotD)
 }
 
 float4 GetInScatteredRadianceAndTransmittance(float2 positionSS, float depthVS,
+                                              float globalFogExtinction,
                                               TEXTURE3D(vBuffer), SAMPLER3D(bilinearSampler),
                                               float4 vBufferProjParams, int numSlices = 64)
 {
-    float3 positionVB = float3(positionSS, vBufferProjParams.x + vBufferProjParams.y * rcp(depthVS));
+    float z = vBufferProjParams.x + vBufferProjParams.y * rcp(depthVS);
+
+    float slice0 = floor(z * numSlices);
+    float slice1 =  ceil(z * numSlices);
 
     // We cannot simply perform trilinear interpolation since the distance between slices is Z-encoded.
-    float slice0 = floor(positionVB.z * numSlices);
-    float slice1 =  ceil(positionVB.z * numSlices);
-    float z0     = saturate(slice0 * rcp(numSlices));
-    float z1     = saturate(slice1 * rcp(numSlices));
-    float d0     = LinearEyeDepth(z0, vBufferProjParams);
-    float d1     = LinearEyeDepth(z1, vBufferProjParams);
+    float z0 = saturate(slice0 * rcp(numSlices));
+    float z1 = saturate(slice1 * rcp(numSlices));
+    float d0 = LinearEyeDepth(z0, vBufferProjParams);
+    float d1 = LinearEyeDepth(z1, vBufferProjParams);
 
     // Perform 2 bilinear taps.
-    float4 v0 = SAMPLE_TEXTURE3D(vBuffer, bilinearSampler, float3(positionVB.xy, z0));
-    float4 v1 = SAMPLE_TEXTURE3D(vBuffer, bilinearSampler, float3(positionVB.xy, z1));
-    float4 vt = lerp(v0, v1, (depthVS - d0) / (d1 - d0));
+    float4 v0 = SAMPLE_TEXTURE3D_LOD(vBuffer, bilinearSampler, float3(positionSS, z0), 0);
+    float4 v1 = SAMPLE_TEXTURE3D_LOD(vBuffer, bilinearSampler, float3(positionSS, z1), 0);
+    float4 vt = lerp(v0, v1, saturate((depthVS - d0) / (d1 - d0)));
+
+    [flatten] if (depthVS - d1 > 0)
+    {
+        // Our sample is beyond the far plane of the V-buffer.
+        // Apply additional global fog attenuation.
+        vt.a += OpticalDepthHomogeneous(globalFogExtinction, depthVS - d1);
+    }
 
     return float4(vt.rgb, Transmittance(vt.a));
 }

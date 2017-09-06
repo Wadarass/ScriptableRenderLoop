@@ -185,6 +185,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
         internal static readonly int _vBufferDimensions = Shader.PropertyToID("_vBufferDimensions");
         internal static readonly int _vBufferProjParams = Shader.PropertyToID("_vBufferProjParams");
         internal static readonly int _vBufferCoordToViewDirWS = Shader.PropertyToID("_vBufferCoordToViewDirWS");
+        internal static readonly int _VolumetricLightingBuffer = Shader.PropertyToID("_VolumetricLightingBuffer");
         internal static readonly int _VolumetricLightingBufferCurrentFrame = Shader.PropertyToID("_VolumetricLightingBufferCurrentFrame");
         internal static readonly int _VolumetricLightingBufferAccumulation = Shader.PropertyToID("_VolumetricLightingBufferAccumulation");
     }

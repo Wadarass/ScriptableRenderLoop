@@ -666,7 +666,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                 cmd.SetGlobalVectorArray(HDShaderIDs._HalfRcpVariancesAndWeights, sssParameters.halfRcpVariancesAndWeights);
                 cmd.SetGlobalVectorArray(HDShaderIDs._TransmissionTints,          sssParameters.transmissionTints);
 
-                SetGlobalVolumeProperties(m_VolumetricLightingEnabled, cmd);
+                SetVolumetricLightingData(m_VolumetricLightingEnabled, cmd, hdCamera);
             }
         }
 

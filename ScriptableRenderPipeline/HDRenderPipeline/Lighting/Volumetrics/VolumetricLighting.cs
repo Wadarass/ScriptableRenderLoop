@@ -120,6 +120,23 @@ public partial class HDRenderPipeline : RenderPipeline
         d = 64;
     }
 
+    // The projection is not reversed (0 = near, 1 = far).
+    // x = f/(f-n), y = (n*f)/(n-f), z = (n-f)/(n*f), w = 1/n.
+    Vector4 ComputeVolumetricBufferProjectionParams(float cameraNearPlane, float cameraFarPlane)
+    {
+        float n = cameraNearPlane;
+        float f = Math.Min(cameraFarPlane, m_VolumetricBufferMaxFarPlane);
+
+        Vector4 projParams = new Vector4();
+
+        projParams.x = f/(f-n);
+        projParams.y = (n*f)/(n-f);
+        projParams.z = (n-f)/(n*f);
+        projParams.w = 1/n;
+
+        return projParams;
+    }
+
     void CreateVolumetricLightingBuffers(int width, int height)
     {
         if (m_VolumetricLightingBufferAccumulation != null)
@@ -131,7 +148,7 @@ public partial class HDRenderPipeline : RenderPipeline
         int w = 0, h = 0, d = 0;
         ComputeVolumetricBufferResolution(width, height, ref w, ref h, ref d);
 
-        m_VolumetricLightingBufferCurrentFrame = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        m_VolumetricLightingBufferCurrentFrame = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear); // UAV with ARGBHalf appears to be broken...
         m_VolumetricLightingBufferCurrentFrame.filterMode        = FilterMode.Bilinear;    // Custom trilinear
         m_VolumetricLightingBufferCurrentFrame.dimension         = TextureDimension.Tex3D; // Prefer 3D Thick tiling layout
         m_VolumetricLightingBufferCurrentFrame.volumeDepth       = d;
@@ -139,7 +156,7 @@ public partial class HDRenderPipeline : RenderPipeline
         m_VolumetricLightingBufferCurrentFrame.Create();
         m_VolumetricLightingBufferCurrentFrameRT = new RenderTargetIdentifier(m_VolumetricLightingBufferCurrentFrame);
 
-        m_VolumetricLightingBufferAccumulation = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        m_VolumetricLightingBufferAccumulation = new RenderTexture(w, h, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear); // UAV with ARGBHalf appears to be broken...
         m_VolumetricLightingBufferAccumulation.filterMode        = FilterMode.Bilinear;    // Custom trilinear
         m_VolumetricLightingBufferAccumulation.dimension         = TextureDimension.Tex3D; // Prefer 3D Thick tiling layout
         m_VolumetricLightingBufferAccumulation.volumeDepth       = d;
@@ -199,21 +216,22 @@ public partial class HDRenderPipeline : RenderPipeline
         return (globalFogComponent != null);
     }
 
-    // The projection is not reversed (0 = near, 1 = far).
-    // x = f/(f-n), y = (n*f)/(n-f), z = (n-f)/(n*f), w = 1/n.
-    Vector4 ComputeVolumetricBufferProjectionParams(float cameraNearPlane, float cameraFarPlane)
+    public void SetVolumetricLightingData(bool volumetricLightingEnabled, CommandBuffer cmd, HDCamera camera, ComputeShader cs = null, int kernel = 0)
     {
-        float n = cameraNearPlane;
-        float f = Math.Min(cameraFarPlane, m_VolumetricBufferMaxFarPlane);
+        SetGlobalVolumeProperties(volumetricLightingEnabled, cmd, cs);
 
-        Vector4 projParams = new Vector4();
+        Vector4 projParams = ComputeVolumetricBufferProjectionParams(camera.camera.nearClipPlane, camera.camera.farClipPlane);
 
-        projParams.x = f/(f-n);
-        projParams.y = (n*f)/(n-f);
-        projParams.z = (n-f)/(n*f);
-        projParams.w = 1/n;
-
-        return projParams;
+        if (cs)
+        {
+            cmd.SetComputeVectorParam( cs,         HDShaderIDs._vBufferProjParams,        projParams);
+            cmd.SetComputeTextureParam(cs, kernel, HDShaderIDs._VolumetricLightingBuffer, m_VolumetricLightingBufferCurrentFrameRT);
+        }
+        else
+        {
+            cmd.SetGlobalVector( HDShaderIDs._vBufferProjParams, projParams);
+            cmd.SetGlobalTexture(HDShaderIDs._VolumetricLightingBuffer, m_VolumetricLightingBufferCurrentFrameRT);
+        }
     }
 
     void VolumetricLightingPass(CommandBuffer cmd, HDCamera camera)
@@ -239,8 +257,8 @@ public partial class HDRenderPipeline : RenderPipeline
             // Compose the matrix which allows us to compute the world space view direction.
             Matrix4x4 transform = Utilities.ComputePixelCoordToWorldSpaceViewDirectionMatrix(camera.camera.fieldOfView * Mathf.Deg2Rad, new Vector4(w, h, 1.0f / w, 1.0f / h), camera.viewMatrix, false);
 
-            cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._vBufferDimensions,       dimensions);
             cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._vBufferProjParams,       projParams);
+            cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._vBufferDimensions,       dimensions);
             cmd.SetComputeMatrixParam( m_VolumetricLightingCS, HDShaderIDs._vBufferCoordToViewDirWS, transform);
             cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._Time,                    Shader.GetGlobalVector(HDShaderIDs._Time));
             cmd.SetComputeTextureParam(m_VolumetricLightingCS, volumetricLightingKernel, HDShaderIDs._VolumetricLightingBufferCurrentFrame, m_VolumetricLightingBufferCurrentFrameRT);

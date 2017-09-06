@@ -35,7 +35,6 @@ TEXTURE3D(_VolumetricLightingBufferAccumulation);            // RGB = radiance, 
 
 CBUFFER_START(UnityVolumetricLighting)
     float4   _vBufferDimensions;       // { width, height, sliceCount = 64, log2(vBufferTileSize) }
-    float4   _vBufferProjParams;       // { f/(f-n), (n*f)/(n-f), (n-f)/(n*f), 1/n }
     float4x4 _vBufferCoordToViewDirWS; // Actually just 3x3, but Unity can only set 4x4
 CBUFFER_END
 
@@ -64,11 +63,12 @@ void FillVolumetricLightingBuffer(Ray cameraRay, float4 projParams, uint2 tileCo
     context.shadowContext = InitShadowContext();
     uint featureFlags = 0xFFFFFFFF;       // TODO
 
-    float n  = rcp(_vBufferProjParams.w); // View space Z coordinate of the near plane
+    float n  = rcp(projParams.w);         // View space Z coordinate of the near plane
     float t0 = n * cameraRay.ratioLenToZ; // Distance to the near plane
     float dz = rcp(sliceCount);           // Z-encoded distance between slices
 
-    float opticalDepth = 0;
+    float3 totalRadiance = 0;
+    float  opticalDepth  = 0;
 
     for (uint s = 0; s < sliceCount; s++)
     {
@@ -196,12 +196,13 @@ void FillVolumetricLightingBuffer(Ray cameraRay, float4 projParams, uint2 tileCo
     #endif
 
         sampleRadiance *= transmittance * phaseConstant;
+        totalRadiance  += sampleRadiance;
 
         // Compute optical depth up to the center of the interval.
         opticalDepth += extinction * (0.5 * dt);
 
         // Store the voxel data. TODO: reprojection using camera motion vectors.
-        _VolumetricLightingBufferCurrentFrame[uint3(voxelCoord, s)] = float4(sampleRadiance, opticalDepth);
+        _VolumetricLightingBufferCurrentFrame[uint3(voxelCoord, s)] = float4(totalRadiance, opticalDepth);
 
         // Compute optical depth up to the end of the interval.
         opticalDepth += extinction * (0.5 * dt);

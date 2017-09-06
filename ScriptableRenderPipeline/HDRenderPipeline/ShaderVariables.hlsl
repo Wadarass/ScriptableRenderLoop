@@ -169,6 +169,7 @@ CBUFFER_END
 // ----------------------------------------------------------------------------
 
 CBUFFER_START(UnityPerFrame)
+#ifdef USE_LEGACY_UNITY_SHADER_VARIABLES
     float4 glstate_lightmodel_ambient;
     float4 unity_AmbientSky;
     float4 unity_AmbientEquator;
@@ -182,9 +183,20 @@ CBUFFER_START(UnityPerFrame)
     float4x4 unity_MatrixVP;
     float4 unity_StereoScaleOffset;
     int unity_StereoEyeIndex;
-#endif
+#endif // USING_STEREO_MATRICES
 
     float4 unity_ShadowColor;
+#else
+    // Volumetric lighting. Should be a struct in 'UnityPerFrame'.
+    // Unfortunately, structures inside constant buffers are not supported by Unity.
+    float4 _vBufferProjParams;
+    float3 _GlobalFog_Scattering;
+    float  _GlobalFog_Extinction;
+    float  _GlobalFog_Asymmetry;
+    float  _GlobalFog_Align16_0;
+    float  _GlobalFog_Align16_1;
+    float  _GlobalFog_Align16_2;
+#endif // USE_LEGACY_UNITY_SHADER_VARIABLES
 CBUFFER_END
 
 // ----------------------------------------------------------------------------
@@ -229,19 +241,9 @@ float4x4 _InvProjMatrix;
 float4   _InvProjParam;
 float4   _ScreenSize;       // (w, h, 1/w, 1/h)
 float4   _FrustumPlanes[6]; // (N, -dot(N, P))
-
-// Volumetric lighting. Should be a struct in 'UnityPerFrame'.
-// Unfortunately, we cannot modify the layout of 'UnityPerFrame',
-// and structures inside constant buffers are not supported by Unity.
-float3 _GlobalFog_Scattering;
-float  _GlobalFog_Extinction;
-float  _GlobalFog_Asymmetry;
-float  _GlobalFog_Align16_0;
-float  _GlobalFog_Align16_1;
-float  _GlobalFog_Align16_2;
 CBUFFER_END
 
-#ifdef USE_LEGACY_UNITY_MATRIX_VARIABLES
+#ifdef USE_LEGACY_UNITY_SHADER_VARIABLES
     #include "ShaderVariablesMatrixDefsLegacyUnity.hlsl"
 #else
     #include "ShaderVariablesMatrixDefsHDCamera.hlsl"

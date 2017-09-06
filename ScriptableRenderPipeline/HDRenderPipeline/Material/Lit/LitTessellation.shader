@@ -312,7 +312,7 @@ Shader "HDRenderPipeline/LitTessellation"
             #pragma domain Domain
 
             #define SHADERPASS SHADERPASS_SHADOWS
-            #define USE_LEGACY_UNITY_MATRIX_VARIABLES
+            #define USE_LEGACY_UNITY_SHADER_VARIABLES
             #include "../../ShaderVariables.hlsl"
             #include "../../Material/Material.hlsl"
             #include "ShaderPass/LitDepthPass.hlsl"
