@@ -67,29 +67,33 @@ float HenyeyGreensteinPhaseFunction(float asymmetry, float LdotD)
 float4 GetInScatteredRadianceAndTransmittance(float2 positionSS, float depthVS,
                                               float globalFogExtinction,
                                               TEXTURE3D(vBuffer), SAMPLER3D(bilinearSampler),
-                                              float4 vBufferProjParams, int numSlices = 64)
+                                              float4 vBufferDepthEncodingParams, int numSlices = 64)
 {
-    float z = vBufferProjParams.x + vBufferProjParams.y * rcp(depthVS);
+    int   n = numSlices;
+    float d = EncodeLogarithmicDepth(depthVS, vBufferDepthEncodingParams);
 
-    float slice0 = floor(z * numSlices);
-    float slice1 =  ceil(z * numSlices);
+    float slice0 = floor(d * n - 0.5);
+    float slice1 =  ceil(d * n - 0.5);
 
     // We cannot simply perform trilinear interpolation since the distance between slices is Z-encoded.
-    float z0 = saturate(slice0 * rcp(numSlices));
-    float z1 = saturate(slice1 * rcp(numSlices));
-    float d0 = LinearEyeDepth(z0, vBufferProjParams);
-    float d1 = LinearEyeDepth(z1, vBufferProjParams);
+    float d0 = saturate(slice0 * rcp(n) + (0.5 * rcp(n)));
+    float d1 = saturate(slice1 * rcp(n) + (0.5 * rcp(n)));
+    float z0 = DecodeLogarithmicDepth(d0, vBufferDepthEncodingParams);
+    float z1 = DecodeLogarithmicDepth(d1, vBufferDepthEncodingParams);
+    float z  = depthVS;
 
     // Perform 2 bilinear taps.
-    float4 v0 = SAMPLE_TEXTURE3D_LOD(vBuffer, bilinearSampler, float3(positionSS, z0), 0);
-    float4 v1 = SAMPLE_TEXTURE3D_LOD(vBuffer, bilinearSampler, float3(positionSS, z1), 0);
-    float4 vt = lerp(v0, v1, saturate((depthVS - d0) / (d1 - d0)));
+    float4 v0 = SAMPLE_TEXTURE3D_LOD(vBuffer, bilinearSampler, float3(positionSS, d0), 0);
+    float4 v1 = SAMPLE_TEXTURE3D_LOD(vBuffer, bilinearSampler, float3(positionSS, d1), 0);
+    float4 vt = lerp(v0, v1, saturate((z - z0) / (z1 - z0)));
 
-    [flatten] if (depthVS - d1 > 0)
+    [flatten] if (z - z1 > 0)
     {
         // Our sample is beyond the far plane of the V-buffer.
         // Apply additional global fog attenuation.
-        vt.a += OpticalDepthHomogeneous(globalFogExtinction, depthVS - d1);
+        vt.a += OpticalDepthHomogeneous(globalFogExtinction, z - z1);
+
+        // TODO: extra in-scattering from directional and ambient lights.
     }
 
     return float4(vt.rgb, Transmittance(vt.a));

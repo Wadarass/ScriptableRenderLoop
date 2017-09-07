@@ -189,7 +189,7 @@ CBUFFER_START(UnityPerFrame)
 #else
     // Volumetric lighting. Should be a struct in 'UnityPerFrame'.
     // Unfortunately, structures inside constant buffers are not supported by Unity.
-    float4 _vBufferProjParams;
+    float4 _vBufferDepthEncodingParams; // {n, log2(f/n), 1/n, 1/log2(f/n)}
     float3 _GlobalFog_Scattering;
     float  _GlobalFog_Extinction;
     float  _GlobalFog_Asymmetry;
@@ -239,8 +239,8 @@ float4x4 _InvViewProjMatrix;
 float4x4 _InvViewMatrix;
 float4x4 _InvProjMatrix;
 float4   _InvProjParam;
-float4   _ScreenSize;       // (w, h, 1/w, 1/h)
-float4   _FrustumPlanes[6]; // (N, -dot(N, P))
+float4   _ScreenSize;       // {w, h, 1/w, 1/h}
+float4   _FrustumPlanes[6]; // {N, -dot(N, P)}
 CBUFFER_END
 
 #ifdef USE_LEGACY_UNITY_SHADER_VARIABLES

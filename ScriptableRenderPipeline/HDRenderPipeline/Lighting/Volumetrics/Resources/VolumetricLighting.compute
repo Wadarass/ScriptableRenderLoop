@@ -50,7 +50,7 @@ struct Ray
 };
 
 // Computes the in-scattered radiance along the ray.
-void FillVolumetricLightingBuffer(Ray cameraRay, float4 projParams, uint2 tileCoord, uint2 voxelCoord, uint sliceCount = 64)
+void FillVolumetricLightingBuffer(Ray cameraRay, float4 depthParams, uint2 tileCoord, uint2 voxelCoord, uint sliceCount = 64)
 {
     float3 scattering = _GlobalFog_Scattering;
     float  extinction = _GlobalFog_Extinction;
@@ -63,17 +63,17 @@ void FillVolumetricLightingBuffer(Ray cameraRay, float4 projParams, uint2 tileCo
     context.shadowContext = InitShadowContext();
     uint featureFlags = 0xFFFFFFFF;       // TODO
 
-    float n  = rcp(projParams.w);         // View space Z coordinate of the near plane
+    float n  = depthParams.x;             // View space Z coordinate of the near plane
     float t0 = n * cameraRay.ratioLenToZ; // Distance to the near plane
-    float dz = rcp(sliceCount);           // Z-encoded distance between slices
+    float du = rcp(sliceCount);           // Log-encoded distance between slices
 
     float3 totalRadiance = 0;
     float  opticalDepth  = 0;
 
     for (uint s = 0; s < sliceCount; s++)
     {
-        float z1 = s * dz + dz; // (s + 1) / sliceCount
-        float t1 = LinearEyeDepth(z1, projParams) * cameraRay.ratioLenToZ;
+        float u1 = s * du + du; // (s + 1) / sliceCount
+        float t1 = DecodeLogarithmicDepth(u1, depthParams) * cameraRay.ratioLenToZ;
         float dt = t1 - t0;
 
         // Integral{a, b}{Transmittance(0, x) dx} = Transmittance(0, a) * Integral{0, b - a}{Transmittance(a, a + x) dx}.
@@ -155,7 +155,8 @@ void FillVolumetricLightingBuffer(Ray cameraRay, float4 projParams, uint2 tileCo
                 float  distSq        = dot(lightToSample, lightToSample);
                 float  dist          = sqrt(distSq);
                 float3 L             = lightToSample * -rsqrt(distSq);
-                float  intensity     = GetPunctualShapeAttenuation(lightData, L, distSq);
+                float  clampedDistSq = max(distSq, 0.25); // Reduce undersampling
+                float  intensity     = GetPunctualShapeAttenuation(lightData, L, clampedDistSq);
                 float3 color         = lightData.color;
 
             #ifdef USE_HENYEY_GREENSTEIN_PHASE_FUNCTION
@@ -260,5 +261,5 @@ void VolumetricLighting(uint2 groupId       : SV_GroupID,
     cameraRay.directionWS = normalize(dir);
     cameraRay.ratioLenToZ = len;
 
-    FillVolumetricLightingBuffer(cameraRay, _vBufferProjParams, tileCoord, voxelCoord);
+    FillVolumetricLightingBuffer(cameraRay, _vBufferDepthEncodingParams, tileCoord, voxelCoord);
 }

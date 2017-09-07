@@ -2010,7 +2010,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
                             Vector4[] transmissionTints = Shader.GetGlobalVectorArray(HDShaderIDs._TransmissionTints);
                             Vector4[] halfRcpVariancesAndWeights = Shader.GetGlobalVectorArray(HDShaderIDs._HalfRcpVariancesAndWeights);
 
-                            Vector4 vBufferProjParams = Shader.GetGlobalVector(HDShaderIDs._vBufferProjParams);
+                            Vector4 vBufferDepthEncodingParams = Shader.GetGlobalVector(HDShaderIDs._vBufferDepthEncodingParams);
                             Texture volumetricLightingBuffer = Shader.GetGlobalTexture(HDShaderIDs._VolumetricLightingBuffer);
 
                             Texture skyTexture = Shader.GetGlobalTexture(HDShaderIDs._SkyTexture);
@@ -2090,7 +2090,7 @@ namespace UnityEngine.Experimental.Rendering.HDPipeline
 
                                 // Replicate HDRenderPipeline.SetVolumetricLightingData().
                                 HDRenderPipeline.SetGlobalVolumeProperties(options.volumetricLightingEnabled, cmd, deferredComputeShader);
-                                cmd.SetComputeVectorParam( deferredComputeShader,         HDShaderIDs._vBufferProjParams,        vBufferProjParams);
+                                cmd.SetComputeVectorParam( deferredComputeShader,         HDShaderIDs._vBufferDepthEncodingParams, vBufferDepthEncodingParams);
                                 cmd.SetComputeTextureParam(deferredComputeShader, kernel, HDShaderIDs._VolumetricLightingBuffer, volumetricLightingBuffer);
 
                                 // always do deferred lighting in blocks of 16x16 (not same as tiled light size)
