@@ -123,6 +123,7 @@ Shader "Hidden/HDRenderPipeline/Deferred"
                                                                                    _GlobalFog_Extinction,
                                                                                    _VolumetricLightingBuffer,
                                                                                    ltc_linear_clamp_sampler, // Right sampler?
+                                                                                   _vBufferResolution,
                                                                                    _vBufferDepthEncodingParams);
                 diffuseLighting  *= volumetricLighting.a;
                 specularLighting *= volumetricLighting.a;

@@ -34,7 +34,6 @@ RW_TEXTURE3D(float4, _VolumetricLightingBufferCurrentFrame); // RGB = radiance, 
 TEXTURE3D(_VolumetricLightingBufferAccumulation);            // RGB = radiance, A = optical depth
 
 CBUFFER_START(UnityVolumetricLighting)
-    float4   _vBufferDimensions;       // { width, height, sliceCount = 64, log2(vBufferTileSize) }
     float4x4 _vBufferCoordToViewDirWS; // Actually just 3x3, but Unity can only set 4x4
 CBUFFER_END
 
@@ -79,7 +78,8 @@ void FillVolumetricLightingBuffer(Ray cameraRay, float4 depthParams, uint2 tileC
         // Integral{a, b}{Transmittance(0, x) dx} = Transmittance(0, a) * Integral{0, b - a}{Transmittance(a, a + x) dx}.
         float transmittance = Transmittance(opticalDepth) * TransmittanceIntegralHomogeneous(extinction, dt);
 
-        // TODO: somehow sample 't' from [t0, t1).
+        // TODO: low-discrepancy point set, mirroring around the bounds of the camera frustum.
+        // Note: using 0.5 here (in the linear space) does not guarantee that we stay within the bounds!
         float t = t0 + 0.5 * dt;
 
         float3 positionWS = cameraRay.originWS + t * cameraRay.directionWS;
@@ -196,11 +196,9 @@ void FillVolumetricLightingBuffer(Ray cameraRay, float4 depthParams, uint2 tileC
         float3 phaseConstant = scattering * IsotropicPhaseFunction();
     #endif
 
-        sampleRadiance *= transmittance * phaseConstant;
-        totalRadiance  += sampleRadiance;
-
         // Compute optical depth up to the center of the interval.
-        opticalDepth += extinction * (0.5 * dt);
+        opticalDepth  += extinction * (0.5 * dt);
+        totalRadiance += transmittance * phaseConstant * sampleRadiance;
 
         // Store the voxel data. TODO: reprojection using camera motion vectors.
         _VolumetricLightingBufferCurrentFrame[uint3(voxelCoord, s)] = float4(totalRadiance, opticalDepth);
@@ -215,7 +213,7 @@ void FillVolumetricLightingBuffer(Ray cameraRay, float4 depthParams, uint2 tileC
 int GetLog2NumVoxelsPerLightTile()
 {
     // Assume that the light tile size is an base-2 multiple of the voxel tile size.
-    return (int)log2(GetTileSize()) - (int)_vBufferDimensions.w;
+    return (int)log2(GetTileSize()) - (int)_vBufferResolution.w;
 }
 
 [numthreads(GROUP_SIZE_2D, 1, 1)]
@@ -234,8 +232,8 @@ void VolumetricLighting(uint2 groupId       : SV_GroupID,
     uint2 voxelCoord = tileAnchor + localCoord;
     uint2 tileCoord  = tileAnchor >> GetLog2NumVoxelsPerLightTile();
 
-    [branch] if (voxelCoord.x >= (uint)_vBufferDimensions.x ||
-                 voxelCoord.y >= (uint)_vBufferDimensions.y)
+    [branch] if (voxelCoord.x >= (uint)_vBufferResolution.x ||
+                 voxelCoord.y >= (uint)_vBufferResolution.y)
     {
         return;
     }
@@ -248,7 +246,8 @@ void VolumetricLighting(uint2 groupId       : SV_GroupID,
 #endif
     // Determine the farthest unoccluded voxel...
 
-    float2 sampleCoord = voxelCoord + 0.5; // TODO: low-discrepancy point set
+    // TODO: low-discrepancy point set, mirroring around the bounds of the camera frustum.
+    float2 sampleCoord = voxelCoord + 0.5;
 
     // Compute the unnormalized ray direction s.t. its Z coordinate in the view space is equal to 1.
     float3 dir = -mul(float3(sampleCoord, 1), (float3x3)_vBufferCoordToViewDirWS);

@@ -105,6 +105,7 @@ public partial class HDRenderPipeline : RenderPipeline
 
     RenderTexture          m_VolumetricLightingBufferCurrentFrame = null;
     RenderTexture          m_VolumetricLightingBufferAccumulation = null;
+
     RenderTargetIdentifier m_VolumetricLightingBufferCurrentFrameRT;
     RenderTargetIdentifier m_VolumetricLightingBufferAccumulationRT;
 
@@ -112,21 +113,33 @@ public partial class HDRenderPipeline : RenderPipeline
 
     void ComputeVolumetricBufferResolution(int screenWidth, int screenHeight, ref int w, ref int h, ref int d)
     {
-        int s = m_VolumetricBufferTileSize;
-        Debug.Assert((s & (s - 1)) == 0, "m_VolumetricBufferTileSize must be a power of 2.");
+        int t = m_VolumetricBufferTileSize;
+        Debug.Assert((t & (t - 1)) == 0, "m_VolumetricBufferTileSize must be a power of 2.");
 
-        w = (screenWidth  + s - 1) / s;
-        h = (screenHeight + s - 1) / s;
+        // Ceil(ScreenSize / TileSize).
+        w = (screenWidth  + t - 1) / t;
+        h = (screenHeight + t - 1) / t;
         d = 64;
+
+        // Cell-centered -> node-centered.
+        w += 1;
+        h += 1;
     }
 
     // Uses a logarithmic depth encoding.
     // Near plane: depth = 0; far plane: depth = 1.
     // x = n, y = log2(f/n), z = 1/n, w = 1/log2(f/n).
-    Vector4 ComputeVolumetricBufferDepthEncodingParams(float cameraNearPlane, float cameraFarPlane)
+    Vector4 ComputeVolumetricBufferDepthEncodingParams(float cameraNearPlane, float cameraFarPlane, float sliceCount)
     {
         float n = cameraNearPlane;
         float f = Math.Min(cameraFarPlane, m_VolumetricBufferMaxFarPlane);
+        float s = sliceCount;
+
+        // Cell-centered -> node-centered.
+        // Remap near and far planes s.t. Depth(n) = 0.5/s and Depth(f) = 1-0.5/s.
+        float x = Mathf.Pow(n, (s - 0.5f) / (s - 1)) * Mathf.Pow(f, -0.5f / (s - 1));
+        f = n * f / x;
+        n = x;
 
         Vector4 depthParams = new Vector4();
 
@@ -221,17 +234,25 @@ public partial class HDRenderPipeline : RenderPipeline
     {
         SetGlobalVolumeProperties(volumetricLightingEnabled, cmd, cs);
 
-        Vector4 depthParams = ComputeVolumetricBufferDepthEncodingParams(camera.camera.nearClipPlane, camera.camera.farClipPlane);
+        // Compute dimensions of the buffer.
+        int w = 0, h = 0, d = 0;
+        ComputeVolumetricBufferResolution((int)camera.screenSize.x, (int)camera.screenSize.y, ref w, ref h, ref d);
+        Vector4 resolution = new Vector4(w, h, d, Mathf.Log(m_VolumetricBufferTileSize, 2));
+
+        // Compute custom near and far flipping planes of the volumetric lighting buffer.
+        Vector4 depthParams = ComputeVolumetricBufferDepthEncodingParams(camera.camera.nearClipPlane, camera.camera.farClipPlane, d);
 
         if (cs)
         {
+            cmd.SetComputeVectorParam( cs,         HDShaderIDs._vBufferResolution,          resolution);
             cmd.SetComputeVectorParam( cs,         HDShaderIDs._vBufferDepthEncodingParams, depthParams);
-            cmd.SetComputeTextureParam(cs, kernel, HDShaderIDs._VolumetricLightingBuffer, m_VolumetricLightingBufferCurrentFrameRT);
+            cmd.SetComputeTextureParam(cs, kernel, HDShaderIDs._VolumetricLightingBuffer,   m_VolumetricLightingBufferCurrentFrameRT);
         }
         else
         {
+            cmd.SetGlobalVector( HDShaderIDs._vBufferResolution,          resolution);
             cmd.SetGlobalVector( HDShaderIDs._vBufferDepthEncodingParams, depthParams);
-            cmd.SetGlobalTexture(HDShaderIDs._VolumetricLightingBuffer, m_VolumetricLightingBufferCurrentFrameRT);
+            cmd.SetGlobalTexture(HDShaderIDs._VolumetricLightingBuffer,   m_VolumetricLightingBufferCurrentFrameRT);
         }
     }
 
@@ -247,19 +268,23 @@ public partial class HDRenderPipeline : RenderPipeline
                                                                                              : "VolumetricLightingAllLights");
             camera.SetupComputeShader(m_VolumetricLightingCS, cmd);
 
-            // Compute custom near and far flipping planes of the volumetric lighting buffer.
-            Vector4 depthParams = ComputeVolumetricBufferDepthEncodingParams(camera.camera.nearClipPlane, camera.camera.farClipPlane);
-
             // Compute dimensions of the buffer.
             int w = 0, h = 0, d = 0;
             ComputeVolumetricBufferResolution((int)camera.screenSize.x, (int)camera.screenSize.y, ref w, ref h, ref d);
-            Vector4 dimensions = new Vector4(w, h, d, Mathf.Log(m_VolumetricBufferTileSize, 2));
+            Vector4 resolution = new Vector4(w, h, d, Mathf.Log(m_VolumetricBufferTileSize, 2));
+
+            // Compute custom near and far flipping planes of the volumetric lighting buffer.
+            Vector4 depthParams = ComputeVolumetricBufferDepthEncodingParams(camera.camera.nearClipPlane, camera.camera.farClipPlane, d);
+
+            // Cell-centered -> node-centered.
+            float vFoV = camera.camera.fieldOfView * Mathf.Deg2Rad;
+            vFoV = 2 * Mathf.Atan(Mathf.Tan(0.5f * vFoV) * h / (h - 1));
 
             // Compose the matrix which allows us to compute the world space view direction.
-            Matrix4x4 transform = Utilities.ComputePixelCoordToWorldSpaceViewDirectionMatrix(camera.camera.fieldOfView * Mathf.Deg2Rad, new Vector4(w, h, 1.0f / w, 1.0f / h), camera.viewMatrix, false);
+            Matrix4x4 transform = Utilities.ComputePixelCoordToWorldSpaceViewDirectionMatrix(vFoV, new Vector4(w, h, 1.0f / w, 1.0f / h), camera.viewMatrix, false);
 
+            cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._vBufferResolution,          resolution);
             cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._vBufferDepthEncodingParams, depthParams);
-            cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._vBufferDimensions,          dimensions);
             cmd.SetComputeMatrixParam( m_VolumetricLightingCS, HDShaderIDs._vBufferCoordToViewDirWS,    transform);
             cmd.SetComputeVectorParam( m_VolumetricLightingCS, HDShaderIDs._Time,                       Shader.GetGlobalVector(HDShaderIDs._Time));
             cmd.SetComputeTextureParam(m_VolumetricLightingCS, volumetricLightingKernel, HDShaderIDs._VolumetricLightingBufferCurrentFrame, m_VolumetricLightingBufferCurrentFrameRT);
